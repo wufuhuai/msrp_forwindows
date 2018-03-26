@@ -3,7 +3,7 @@
 /*
 	Case-insensitive implementation of strstr
 */
-const char *stristr(const char *haystack, const char *needle)
+const char *stristr(const char *haystack, const char *needle)  //compare words inoring the case (case-insensitive)
 {
 	if(!*needle)
 		return haystack;
@@ -34,7 +34,9 @@ char *random_string(char *buf, size_t size)
 	for (x = 0; x < 4; x++)
 		val[x] = random();
 	snprintf(buf, size, "%08lx%08lx%08lx%08lx", val[0], val[1], val[2], val[3]);
-
+#ifdef USEFORWIN
+	buf[size-1] = '\0';
+#endif
 	return buf;
 }
 
@@ -111,7 +113,6 @@ void MSRP_SESSION_LIST_ADD_WIN(msrp_session* list, pthread_mutex_t lock, msrp_se
 		previous->next = (element);				
 		pthread_mutex_unlock(&(lock));				
 	}
-	return ;
 }
 
 #endif

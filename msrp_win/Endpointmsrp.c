@@ -94,11 +94,11 @@ int main(int argc, char *argv[])
 	printf("Insert your peer's nickname (for visualization only): ");
 	peerdisplay = calloc(LEN_128, sizeof(char));
 	memset(peerdisplay, 0, LEN_128*sizeof(char));
-	scanf(" %a[^\n]", &peerdisplay);
+	scanf(" %s[^\n]", peerdisplay);
 	printf("Insert the full 'To' path: ");
 	path = calloc(LEN_128, sizeof(char));
 	memset(path, 0, LEN_128*sizeof(char));
-	scanf(" %a[^\n]", &path);
+	scanf(" %s[^\n]", path);
 
 	if(msrp_endpoint_set_to(endpoint, path, content, flags, MSRP_SENDRECV) < 0) {
 		printf("Error creating new %s 'To' peer...\n", active ? "passive" : "active");
@@ -109,10 +109,13 @@ int main(int argc, char *argv[])
 
 	/* This simulates a chat window */
 	be_alive = 1;
+	
+	lineptr = calloc(LEN_128, sizeof(char));
+	memset(lineptr, 0, LEN_128*sizeof(char));
 
 	while(be_alive) {
 		printf("<%s> ", display);
-		scanf(" %a[^\n]", &lineptr);
+		scanf(" %s", lineptr);
 		command = lineptr;
 		while(*command && *command < 33)
 			command++;

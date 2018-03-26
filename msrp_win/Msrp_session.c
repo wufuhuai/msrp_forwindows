@@ -235,35 +235,36 @@ char *msrp_session_get_fullpath(msrp_session *session, char *whose)
 //
 //	return types;
 //}
-//
-///*
-//	Get session from the associated file descriptor(s)
-//*/
-//msrp_session *msrp_session_get(int fd)
-//{
-//	if(fd < 1)
-//		return NULL;
-//
-//	msrp_session *session = NULL;
-//	msrp_peer *from = NULL, *to = NULL;
-//	MSRP_LIST_CHECK(sessions, NULL);
-//	MSRP_LIST_CROSS(sessions, sessions_lock, session)
-//		from = session->from;
-//		to = session->to;
-//		if(session->fd == fd)
-//			break;
-//		if(from) {
-//			if(from->fd == fd)
-//				break;
-//		}
-//		if(to) {
-//			if(to->fd == fd)
-//				break;
-//		}
-//	MSRP_LIST_STEP(sessions, sessions_lock, session);
-//
-//	return session;
-//}
+
+/*
+	Get session from the associated file descriptor(s)
+*/
+msrp_session *msrp_session_get(int fd)
+{
+	msrp_session *session = NULL;
+	msrp_peer *from = NULL, *to = NULL;
+
+	if(fd < 1)
+		return NULL;
+
+	MSRP_LIST_CHECK(sessions, NULL);
+	MSRP_LIST_CROSS(sessions, sessions_lock, session)
+		from = session->from;
+		to = session->to;
+		if(session->fd == fd)
+			break;
+		if(from) {
+			if(from->fd == fd)
+				break;
+		}
+		if(to) {
+			if(to->fd == fd)
+				break;
+		}
+	MSRP_LIST_STEP(sessions, sessions_lock, session);
+
+	return session;
+}
 
 /*
 	Setup the connection between the two peers of this session
@@ -324,7 +325,8 @@ msrp_peer *msrp_peer_new(char *sessionid)
 			free(peer);
 			return NULL;
 		}
-		peer->sessionid = strcpy(peer->sessionid, sessionid);
+		//peer->sessionid = strcpy(peer->sessionid, sessionid);
+		strcpy(peer->sessionid, sessionid);
 	}
 	local_events(MSRP_LOG, "Created peer with Session-ID %s", peer->sessionid);
 
@@ -438,9 +440,7 @@ int msrp_peer_bind(msrp_peer *peer)
 
 
 	if(setsockopt(peer->fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
-		//close(peer->fd);
-		closesocket(peer->fd);
-		WSACleanup();
+		close(peer->fd);
 		peer->fd = -1;
 		return -1;
 	}
@@ -454,9 +454,7 @@ int msrp_peer_bind(msrp_peer *peer)
 		peer->sockaddr->sin_port = htons(port);
 		if(bind(peer->fd, (struct sockaddr *)(peer->sockaddr), sizeof(struct sockaddr)) < 0) {
 			if(!randomport) {	/* Port was explicit, fail */
-				//close(peer->fd);
-				closesocket(peer->fd);
-				WSACleanup();
+				close(peer->fd);
 				peer->fd = -1;
 				return -1;
 			}
@@ -469,9 +467,7 @@ int msrp_peer_bind(msrp_peer *peer)
 	if(success)
 		peer->port = port;
 	else {
-		//close(peer->fd);
-		closesocket(peer->fd);
-		WSACleanup();
+		close(peer->fd);
 		peer->fd = -1;
 		return -1;
 	}
@@ -547,9 +543,7 @@ int msrp_peer_listen(msrp_peer *peer)
 
 	/* Start listening on the provided port */
 	if(listen(peer->fd, 5) < 0) {
-		//close(peer->fd);
-		closesocket(peer->fd);
-		WSACleanup();
+		close(peer->fd);
 		peer->fd = -1;
 		return -1;
 	}

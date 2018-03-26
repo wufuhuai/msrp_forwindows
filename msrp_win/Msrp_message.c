@@ -58,40 +58,40 @@ int msrp_message_fill(msrp_message *message, char *data, int start, int end)
 	if((start < 0) || (end < 0) || (start >= end) || (end > message->bytes))
 		return -1;
 	
-	if (message->data = NULL)
+	if (message->data == NULL)
 	{
 		return -1;
 	}
+	message->data = message->data + start;
 	memcpy(message->data + start, data, end - start); //memory is alloc in method : msrp_message_new()
 
 	return 0;
 }
 
-//
-///*
-//	Get MSRP message from the list of incoming messages for a session
-//*/
-//msrp_message *msrp_message_get(msrp_session *session, char *messageid)
-//{
-//	if(!session || !messageid)
-//		return NULL;
-//
-//	msrp_message *message = NULL;
-//
-//	int j = 0;
-//	for(j = 0; j < MSRP_MSG_BUFFER; j++) {
-//		if(session->in_msg[j]) {
-//			if(!strcasecmp(session->in_msg[j]->messageid, messageid)) {
-//				message = session->in_msg[j];
-//				break;
-//			}
-//		}
-//	}
-//
-//	return message;
-//}
-//
-//
+
+/*
+	Get MSRP message from the list of incoming messages for a session
+*/
+msrp_message *msrp_message_get(msrp_session *session, char *messageid)
+{
+	msrp_message *message = NULL;
+	int j = 0;
+	if(!session || !messageid)
+		return NULL;
+	
+	for(j = 0; j < MSRP_MSG_BUFFER; j++) {
+		if(session->in_msg[j]) {
+			if(!strcasecmp(session->in_msg[j]->messageid, messageid)) {
+				message = session->in_msg[j];
+				break;
+			}
+		}
+	}
+
+	return message;
+}
+
+
 ///*
 //	Create a new chunk from a message
 //*/
@@ -277,6 +277,12 @@ int msrp_send_chunk(msrp_message *message, int start, int end)
 
 	total = strlen(buffer);
 	err = send(to->fd, buffer, total, 0);
+#ifdef USEFORWIN
+	if (SOCKET_ERROR == err)
+	{
+		printf("%d \n",WSAGetLastError());
+	}
+#endif
 	if(err < 0) {
 		local_events(MSRP_ERROR, "Error sending chunk (message %s, transaction %s)",
 					message->messageid, transactionid);
@@ -289,52 +295,59 @@ int msrp_send_chunk(msrp_message *message, int start, int end)
 }
 
 
-///*
-//	Automated reply (OK or error) to a received chunk/message
-//*/
-//int msrp_send_reply(msrp_message *message, char *transactionid, int start, int end, int code)
-//{
-//	if(!message || !transactionid || (code < 200))
-//		return -1;
-//	if(!message->session)
-//		return -1;
-//
-// 	int transport = chunk->message->session->transport;
-//
-//	msrp_peer *from = message->session->from;
-//	msrp_peer *to = message->session->to;
-//	if(!from || !to)
-//		return -1;
-//
-//	char buffer[500];
-//	memset(buffer, 0, 500);
-//	int res = 0;
-//	res = msrp_add_request_line(buffer, transactionid, code);
-//	/* TODO from and to must consider the context, which is ignored for now */
-//	res |= msrp_add_topath_line(buffer, msrp_peer_get_path(to));
-//	res |= msrp_add_frompath_line(buffer, msrp_peer_get_path(from));
-//	res |= msrp_add_byterange_line(buffer, start, end, message->bytes);
-//	res |= msrp_add_end_line(buffer, transactionid, MSRP_LAST_CHUNK);
-//
-//	if(res < 0) {
-//		local_events(MSRP_ERROR, "Error building reply (message %s, transaction %s)",
-//					message->messageid, transactionid);
-//		return -1;
-//	}
-//
-//	int total = strlen(buffer);
-//	int err = send(to->fd, buffer, total, 0);
-//	if(err < 0) {
-//		local_events(MSRP_ERROR, "Error sending reply (message %s, transaction %s)",
-//					message->messageid, transactionid);
-//		return -1;
-//	}
-//	local_events(MSRP_LOG, "Reply (message %s, transaction %s) sent (%d bytes)",
-//				message->messageid, transactionid, err);
-//
-//	return 0;
-//}
-//
+/*
+	Automated reply (OK or error) to a received chunk/message
+*/
+int msrp_send_reply(msrp_message *message, char *transactionid, int start, int end, int code)
+{
+	msrp_peer *from = NULL;
+	msrp_peer *to = NULL;
+	char buffer[500];
+	int res = 0;
+	int total = -1;
+	int err = -1;
+
+	if(!message || !transactionid || (code < 200))
+		return -1;
+	if(!message->session)
+		return -1;
+
+ 	//int transport = chunk->message->session->transport;
+
+	from = message->session->from;
+	to = message->session->to;
+	if(!from || !to)
+		return -1;
+
+	
+	memset(buffer, 0, 500);
+	
+	res = msrp_add_request_line(buffer, transactionid, code);
+	/* TODO from and to must consider the context, which is ignored for now */
+	res |= msrp_add_topath_line(buffer, msrp_peer_get_path(to));
+	res |= msrp_add_frompath_line(buffer, msrp_peer_get_path(from));
+	res |= msrp_add_byterange_line(buffer, start, end, message->bytes);
+	res |= msrp_add_end_line(buffer, transactionid, MSRP_LAST_CHUNK);
+
+	if(res < 0) {
+		local_events(MSRP_ERROR, "Error building reply (message %s, transaction %s)",
+					message->messageid, transactionid);
+		return -1;
+	}
+
+	total = strlen(buffer);
+	err = send(to->fd, buffer, total, 0);
+	if(err < 0) {
+		local_events(MSRP_ERROR, "Error sending reply (message %s, transaction %s)",
+					message->messageid, transactionid);
+		return -1;
+	}
+	local_events(MSRP_LOG, "Reply (message %s, transaction %s) sent (%d bytes)",
+				message->messageid, transactionid, err);
+
+	return 0;
+}
+
 
 /*
 	Add a line to the buffer according to the printf-like format string
@@ -535,240 +548,252 @@ int msrp_add_end_line(char *buffer, char *transactionid, int trailer)
 
 
 
-///*
-//	Parse a received buffer to get a chunk/message out of it
-//*/
-//int msrp_buffer_parse(int fd, msrp_session *session, char *buffer, int total)
-//{
-//	if(fd < 0) {
-//		local_events(MSRP_ERROR, "Invalid file descriptor for buffer to parse");
-//		return -1;
-//	}
-//	if(!session) {
-//		local_events(MSRP_ERROR, "Invalid session for buffer to parse");
-//		return -1;
-//	}
-//	if(!buffer || total < 1) {
-//		local_events(MSRP_ERROR, "Invalid buffer to parse (Call-ID %s)", session->callid);
-//		return -1;
-//	}
-//
-//	const char *chunk = buffer;
-//	int bytes = total, method = -1, code = -1;
-//	char header[10], transactionid[20], request[10], desc[30];
-//
-//	while(1) {	/* Loop in the buffer until we get all the chunks */
-//		local_events(MSRP_LOG, "%d bytes left to parse", bytes);
-//		if(bytes <= 1)
-//			break;
-//
-//		/* Look for the beginning of the chunk/message, i.e. for the 'MSRP' string */
-//		const char *start = stristr((const char *)chunk, "msrp");
-//		if(!start) {	/* Invalid message */
-//			local_events(MSRP_ERROR, "Couldn't find starting 'MSRP'");
-//			return -1;
-//		}
-//		chunk = start;
-//
-//		char line[100], *linedem = NULL;
-//		memset(line, 0, 100);
-//		linedem = strstr(chunk, "\r\n");
-//		if(!linedem) {
-//			local_events(MSRP_ERROR, "Couldn't find end of 'MSRP' line");
-//			return -1;
-//		}
-//		strncpy(line, chunk, linedem - chunk);
-//		/*
-//			Two possible cases now:
-//				1. MSRP transactionid SEND/REPORT/AUTH
-//				2. MSRP transactionid codenumber codedescription (e.g. 200 OK)
-//		*/
-//		memset(header, 0, 10);
-//		memset(transactionid, 0, 20);
-//		memset(request, 0, 10);
-//		memset(desc, 0, 30);
-//		if(!sscanf(line, "%s %s %s %s", header, transactionid, request, desc)) {
-//			if(!sscanf(line, "%s %s %s", header, transactionid, request)) {
-//				local_events(MSRP_ERROR, "Invalid header '%s'", line);
-//				return -1;	/* Invalid header */
-//			}
-//		}
-//
-//		if(strcasecmp(header, "msrp")) {
-//			local_events(MSRP_ERROR, "Header is not 'MSRP' (%s)", header);
-//			return -1;	/* Invalid message */
-//		}
-//		if(!strcasecmp(request, "send"))
-//			method = MSRP_SEND;
-//		else if(!strcasecmp(request, "report"))
-//			method = MSRP_REPORT;
-//		else if(!strcasecmp(request, "auth"))
-//			method = MSRP_AUTH;
-//		else {
-//			code = atoi(request);
-//			if(!code) {
-//				local_events(MSRP_ERROR, "Invalid method '%s'", request);
-//				return -1;	/* Invalid message */
-//			}
-//		}
-//
-//		/* Look for the end of the message using the Chunk-ID */
-//		char *end = strstr(linedem, transactionid);
-//		if(!end) {	/* FIXME */
-//			local_events(MSRP_ERROR, "Couldn't find end of the chunk/message (transaction %s)", transactionid);
-//			return -1;	/* No end? */
-//		}
-//		char *delimiter = end + strlen(transactionid);
-//		int last_chunk = 0;
-//		if(*delimiter == '$')
-//			last_chunk = 1;
-//		else if(*delimiter == '+')
-//			last_chunk = 0;
-//		else {	/* Delimiter # not implemented yet */
-//			local_events(MSRP_ERROR, "Unimplemented trailer char '%c'", *delimiter);
-//			return -1;
-//		}
-//		delimiter = delimiter + 2;	/* Skip the trailer \r\n */
-//		bytes -= delimiter - start;	/* Update the overall number of bytes */
-//
-//		/* Payload starts after an empty line */
-//		char *payload = strstr(chunk, "\r\n\r\n");
-//		if(payload > delimiter)
-//			break;
-//		/* Parse the other lines between the header and the payload */
-//		linedem++;
-//		char *chunkline = linedem;
-//		char *separator = NULL;
-//
-//		char attribute[20], value[100];
-//		char frompath[100], topath[100], messageid[20];
-//		int br_start = 0, br_end = 0, br_total = 0,
-//			content = -1, reports = 0, status = 0;
-//
-//		while(1) {
-//			memset(attribute, 0, 20);
-//			memset(value, 0, 100);
-//			chunkline++;			/* Skip the previous \r\n */
-//			if(chunkline >= payload)	/* Stop if we reached the payload */
-//				break;
-//			linedem = strstr(chunkline, "\r\n");
-//			if(!linedem || (linedem > payload))
-//				break;
-//			strncpy(line, chunkline, linedem - chunkline);
-//			/* Attributes and values are separated by a semicolon */
-//			separator = strstr(chunkline, ":");
-//			if(!separator || (separator > linedem))
-//				break;
-//			/* Copy the attribute name */
-//			strncpy(attribute, chunkline, separator - chunkline);
-//			/* Skip the blanks after the semicolon... */
-//			separator++;
-//			while(*separator && (*separator < 33) && (separator < linedem))
-//				separator++;
-//			if(!separator || (separator > linedem))
-//				break;
-//			/* ...and copy the value(s) */
-//			strncpy(value, separator, linedem - separator);
-//			/* Now parse the attribute accordingly */
-//			if(!strcasecmp(attribute, "from-path")) {
-//				memset(frompath, 0, 100);
-//				strcpy(frompath, value);
-//			} else if(!strcasecmp(attribute, "to-path")) {
-//				memset(topath, 0, 100);
-//				strcpy(topath, value);
-//			} else if(!strcasecmp(attribute, "message-id")) {
-//				memset(messageid, 0, 20);
-//				strcpy(messageid, value);
-//			} else if(!strcasecmp(attribute, "byte-range")) {
-//				if(sscanf(value, "%d-%d/%d", &br_start, &br_end, &br_total)) {
-//					if(br_end == 0) {	/* Check if it is '*' */
-//						separator = strstr(separator, "-*");
-//						if(separator && (separator <= linedem))
-//							br_end = br_total;
-//					}
-//				}
-//			} else if(!strcasecmp(attribute, "content-type")) {
-//				int i = 0;
-//				while(1) {
-//					if(msrp_content_type[i].content < 0)
-//						break;
-//					if(!strcasecmp(msrp_content_type[i].desc, value)) {
-//						content = msrp_content_type[i].content;
-//						break;
-//					}
-//					i++;
-//				}
-//			} else if(!strcasecmp(attribute, "success-report")) {
-//				if(!strcasecmp(value, "yes"))
-//					reports |= MSRP_SUCCESS_REPORT;
-//				else if(!strcasecmp(value, "partial"))
-//					reports |= MSRP_SUCCESS_REPORT_PARTIAL;
-//			} else if(!strcasecmp(attribute, "failure-report")) {
-//				if(!strcasecmp(value, "yes"))
-//					reports |= MSRP_FAILURE_REPORT;
-//				else if(!strcasecmp(value, "partial"))
-//					reports |= MSRP_FAILURE_REPORT_PARTIAL;
-//			} else if(!strcasecmp(attribute, "status")) {
-//				sscanf(value, "%*s %d %*s", &status);	/* FIXME */
-//			}
-//			/* Pass to the following line */
-//			linedem++;
-//			chunkline = linedem;
-//		}
-//		payload += 4;
-//		if((method == MSRP_SEND) || (method == MSRP_REPORT) || (method == MSRP_AUTH)) {
-//			/* Now check if a message with this Message-ID exists in this session */
-//			msrp_message *message = msrp_message_get(session, messageid);
-//			if(!message) {	/* Create a new message */
-//				message = msrp_message_new(messageid, content, br_total);
-//				if(!message) {
-//					local_events(MSRP_ERROR, "Couldn't create new message (ID %s) from incoming buffer", messageid);
-//					return -1;
-//				}
-//				local_events(MSRP_LOG, "New message '%s' created from incoming buffer", messageid);
-//				if(msrp_message_setup(message, session, method, reports, status) < 0) {
-//					local_events(MSRP_ERROR, "Couldn't setup the new message '%s'", messageid);
-//					return -1;
-//				}
-//				local_events(MSRP_LOG, "New message '%s' setup completed", messageid);
-//			}
-//			/* TODO check consistency (values in chunk and values in message) */
-//			/* Get data from the chunk and put it in the right place in the overall buffer */
-//			if(msrp_message_fill(message, payload, br_start - 1, br_end) < 0)
-//				local_events(MSRP_ERROR, "Couldn't fill buffer in message '%s'", messageid);
-//			else
-//				local_events(MSRP_LOG, "Buffer filled in message '%s'", messageid);
-//
-//			/* FIXME check better message for automated replies (e.g. ACKs) */
-//			msrp_peer *to = message->session->to;
-//			if((to->rights == MSRP_SENDRECV) || (to->rights == MSRP_SENDONLY)) {
-//				msrp_send_reply(message, transactionid, br_start, br_end, 200);
-//
-//				if(session->type == MSRP_ENDPOINT) {
-//					/*
-//						FIXME: message should be sent to callback only if complete
-//							(i.e. check if all chunks have been received)
-//							besides, if we received MIME content, decode from
-//							base64 first?
-//					*/
-//					MsrpEndpoint *endpoint = (MsrpEndpoint *)session->session;
-//					if(endpoint) {
-//						local_events(MSRP_LOG, "Received text: %s", (char *)message->data);
-//						if(method == MSRP_SEND)
-//							local_ep_callback(MSRP_INCOMING_SEND, endpoint, content, message->data, message->bytes);
-//						else if(method == MSRP_REPORT)
-//							local_ep_callback(MSRP_INCOMING_REPORT, endpoint, content, message->data, message->bytes);
-//					}
-//				} else if(session->type == MSRP_SWITCH) {
+/*
+	Parse a received buffer to get a chunk/message out of it
+*/
+int msrp_buffer_parse(int fd, msrp_session *session, char *buffer, int total)
+{
+	const char *chunk = buffer;
+	int bytes = total, method = -1, code = -1;
+	char header[10], transactionid[20], request[10], desc[30];
+	char *payload = NULL;
+	char *chunkline = NULL;
+	char *separator = NULL;
+
+	if(fd < 0) {
+		local_events(MSRP_ERROR, "Invalid file descriptor for buffer to parse");
+		return -1;
+	}
+	if(!session) {
+		local_events(MSRP_ERROR, "Invalid session for buffer to parse");
+		return -1;
+	}
+	if(!buffer || total < 1) {
+		local_events(MSRP_ERROR, "Invalid buffer to parse (Call-ID %s)", session->callid);
+		return -1;
+	}
+
+	while(1) {	/* Loop in the buffer until we get all the chunks */
+		const char *start = NULL;
+		char line[100], *linedem = NULL;
+		char *end = NULL;
+		char *delimiter = NULL;
+		int last_chunk = 0;
+
+		char attribute[20], value[100];
+		char frompath[100], topath[100], messageid[20];
+		int br_start = 0, br_end = 0, br_total = 0,
+			content = -1, reports = 0, status = 0;
+
+
+		local_events(MSRP_LOG, "%d bytes left to parse", bytes);
+		if(bytes <= 1)
+			break;
+
+		/* Look for the beginning of the chunk/message, i.e. for the 'MSRP' string */
+		start = stristr((const char *)chunk, "msrp");
+		if(!start) {	/* Invalid message */
+			local_events(MSRP_ERROR, "Couldn't find starting 'MSRP'");
+			return -1;
+		}
+		chunk = start;
+
+		memset(line, 0, 100);
+		linedem = strstr(chunk, "\r\n");
+		if(!linedem) {
+			local_events(MSRP_ERROR, "Couldn't find end of 'MSRP' line");
+			return -1;
+		}
+		strncpy(line, chunk, linedem - chunk);
+		/*
+			Two possible cases now:
+				1. MSRP transactionid SEND/REPORT/AUTH
+				2. MSRP transactionid codenumber codedescription (e.g. 200 OK)
+		*/
+		memset(header, 0, 10);
+		memset(transactionid, 0, 20);
+		memset(request, 0, 10);
+		memset(desc, 0, 30);
+		if(!sscanf(line, "%s %s %s %s", header, transactionid, request, desc)) {
+			if(!sscanf(line, "%s %s %s", header, transactionid, request)) {
+				local_events(MSRP_ERROR, "Invalid header '%s'", line);
+				return -1;	/* Invalid header */
+			}
+		}
+
+		if(strcasecmp(header, "msrp")) {
+			local_events(MSRP_ERROR, "Header is not 'MSRP' (%s)", header);
+			return -1;	/* Invalid message */
+		}
+		if(!strcasecmp(request, "send"))
+			method = MSRP_SEND;
+		else if(!strcasecmp(request, "report"))
+			method = MSRP_REPORT;
+		else if(!strcasecmp(request, "auth"))
+			method = MSRP_AUTH;
+		else {
+			code = atoi(request);
+			if(!code) {
+				local_events(MSRP_ERROR, "Invalid method '%s'", request);
+				return -1;	/* Invalid message */
+			}
+		}
+
+		/* Look for the end of the message using the Chunk-ID */
+		end = strstr(linedem, transactionid);
+		if(!end) {	/* FIXME */
+			local_events(MSRP_ERROR, "Couldn't find end of the chunk/message (transaction %s)", transactionid);
+			return -1;	/* No end? */
+		}
+		delimiter = end + strlen(transactionid);
+		last_chunk = 0;
+		if(*delimiter == '$')
+			last_chunk = 1;
+		else if(*delimiter == '+')
+			last_chunk = 0;
+		else {	/* Delimiter # not implemented yet */
+			local_events(MSRP_ERROR, "Unimplemented trailer char '%c'", *delimiter);
+			return -1;
+		}
+		delimiter = delimiter + 2;	/* Skip the trailer \r\n */
+		bytes -= delimiter - start;	/* Update the overall number of bytes */
+
+		/* Payload starts after an empty line */
+		payload = strstr(chunk, "\r\n\r\n"); //find body
+		if(payload > delimiter)
+			break;
+		/* Parse the other lines between the header and the payload */
+		linedem++;
+		chunkline = linedem;
+		separator = NULL;
+
+		while(1) {
+			memset(attribute, 0, 20);
+			memset(value, 0, 100);
+			chunkline++;			/* Skip the previous \r\n */
+			if(chunkline >= payload)	/* Stop if we reached the payload */
+				break;
+			linedem = strstr(chunkline, "\r\n");
+			if(!linedem || (linedem > payload))
+				break;
+			strncpy(line, chunkline, linedem - chunkline);
+			/* Attributes and values are separated by a semicolon */
+			separator = strstr(chunkline, ":");
+			if(!separator || (separator > linedem))
+				break;
+			/* Copy the attribute name */
+			strncpy(attribute, chunkline, separator - chunkline);
+			/* Skip the blanks after the semicolon... */
+			separator++;
+			while(*separator && (*separator < 33) && (separator < linedem))
+				separator++;
+			if(!separator || (separator > linedem))
+				break;
+			/* ...and copy the value(s) */
+			strncpy(value, separator, linedem - separator);
+			/* Now parse the attribute accordingly */
+			if(!strcasecmp(attribute, "from-path")) {
+				memset(frompath, 0, 100);
+				strcpy(frompath, value);
+			} else if(!strcasecmp(attribute, "to-path")) {
+				memset(topath, 0, 100);
+				strcpy(topath, value);
+			} else if(!strcasecmp(attribute, "message-id")) {
+				memset(messageid, 0, 20);
+				strcpy(messageid, value);
+			} else if(!strcasecmp(attribute, "byte-range")) {
+				if(sscanf(value, "%d-%d/%d", &br_start, &br_end, &br_total)) {
+					if(br_end == 0) {	/* Check if it is '*' */  //??????
+						separator = strstr(separator, "-*");
+						if(separator && (separator <= linedem))
+							br_end = br_total;
+					}
+				}
+			} else if(!strcasecmp(attribute, "content-type")) {
+				int i = 0;
+				while(1) {
+					if(msrp_content_type[i].content < 0)
+						break;
+					if(!strcasecmp(msrp_content_type[i].desc, value)) {
+						content = msrp_content_type[i].content;
+						break;
+					}
+					i++;
+				}
+			} else if(!strcasecmp(attribute, "success-report")) {
+				if(!strcasecmp(value, "yes"))
+					reports |= MSRP_SUCCESS_REPORT;
+				else if(!strcasecmp(value, "partial"))
+					reports |= MSRP_SUCCESS_REPORT_PARTIAL;
+			} else if(!strcasecmp(attribute, "failure-report")) {
+				if(!strcasecmp(value, "yes"))
+					reports |= MSRP_FAILURE_REPORT;
+				else if(!strcasecmp(value, "partial"))
+					reports |= MSRP_FAILURE_REPORT_PARTIAL;
+			} else if(!strcasecmp(attribute, "status")) {
+				sscanf(value, "%*s %d %*s", &status);	/* FIXME */
+			}
+			/* Pass to the following line */
+			linedem++;
+			chunkline = linedem;
+		}
+
+		payload += 4; //body begin
+		if((method == MSRP_SEND) || (method == MSRP_REPORT) || (method == MSRP_AUTH)) {
+			msrp_peer *to = NULL;
+			/* Now check if a message with this Message-ID exists in this session */
+			msrp_message *message = msrp_message_get(session, messageid);
+			if(!message) {	/* Create a new message */
+				message = msrp_message_new(messageid, content, br_total);
+				if(!message) {
+					local_events(MSRP_ERROR, "Couldn't create new message (ID %s) from incoming buffer", messageid);
+					return -1;
+				}
+				local_events(MSRP_LOG, "New message '%s' created from incoming buffer", messageid);
+				if(msrp_message_setup(message, session, method, reports, status) < 0) {
+					local_events(MSRP_ERROR, "Couldn't setup the new message '%s'", messageid);
+					return -1;
+				}
+				local_events(MSRP_LOG, "New message '%s' setup completed", messageid);
+			}
+			/* TODO check consistency (values in chunk and values in message) */
+			/* Get data from the chunk and put it in the right place in the overall buffer */
+			if(msrp_message_fill(message, payload, br_start - 1, br_end) < 0)
+				local_events(MSRP_ERROR, "Couldn't fill buffer in message '%s'", messageid);
+			else
+				local_events(MSRP_LOG, "Buffer filled in message '%s'", messageid);
+
+			/* FIXME check better message for automated replies (e.g. ACKs) */
+			to = message->session->to;
+			if((to->rights == MSRP_SENDRECV) || (to->rights == MSRP_SENDONLY)) {
+				msrp_send_reply(message, transactionid, br_start, br_end, 200);
+
+				if(session->type == MSRP_ENDPOINT) {
+					/*
+						FIXME: message should be sent to callback only if complete
+							(i.e. check if all chunks have been received)
+							besides, if we received MIME content, decode from
+							base64 first?
+					*/
+					MsrpEndpoint *endpoint = (MsrpEndpoint *)session->session;
+					if(endpoint) {
+						local_events(MSRP_LOG, "Received text: %s", (char *)message->data);
+						if(method == MSRP_SEND)
+							local_ep_callback(MSRP_INCOMING_SEND, endpoint, content, message->data, message->bytes);
+						else if(method == MSRP_REPORT)
+							local_ep_callback(MSRP_INCOMING_REPORT, endpoint, content, message->data, message->bytes);
+					}
+				} else if(session->type == MSRP_SWITCH) {
 //					/* Forward received message to all other users in the conference */
 //					if(method != MSRP_SEND)
 //						continue;
 //					msrp_conference *conf = (msrp_conference *)session->session;
 //					msrp_conference_forward_message(conf, fd, session, message->data, message->bytes);
-//				}
-//			} else	/* Unauthorized */
-//				msrp_send_reply(message, transactionid, br_start, br_end, 403);
-//		} else { /* It is an automated reply */
+				}
+			} else{	/* Unauthorized */
+				msrp_send_reply(message, transactionid, br_start, br_end, 403);
+			}
+		} else { /* It is an automated reply */
 //			char *statuscode = NULL;
 //			int i = 0;
 //			while(1) {
@@ -785,13 +810,13 @@ int msrp_add_end_line(char *buffer, char *transactionid, int trailer)
 //			if(endpoint)
 //				local_ep_callback(code, endpoint, MSRP_TEXT_PLAIN, statuscode, strlen(statuscode));
 //			/* TODO check what else do with received ACKs */
-//		}
+		}
 //		chunk = start + bytes;		/* Pass to the next message, if present */
-//	}
-//
-//	return 0;
-//}
-//
+	}
+
+	return 0;
+}
+
 ///*
 //	Extract only the 'From-Path' line, to identify senders
 //*/

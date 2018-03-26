@@ -11,6 +11,11 @@ int msrp_init(void(*app_events)(int event, void *info))
 	pthread_attr_t attr;
 #ifdef USEFORWIN
 	winsocket_init(); //add by wfh
+	recv_lock = PTHREAD_MUTEX_INITIALIZER;
+	sessions_lock = PTHREAD_MUTEX_INITIALIZER;
+	contexts_lock = PTHREAD_MUTEX_INITIALIZER;
+	relays_lock = PTHREAD_MUTEX_INITIALIZER;
+	switches_lock = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 	if(msrp_exists)		/* Library is already initialized */
@@ -78,6 +83,10 @@ int msrp_quit(void)
 {
 	msrp_exists = 0;
 
+#ifdef USEFORWIN
+	winsocket_clean();
+#endif
+	
 	//MSRP_LIST_FREE(sessions, sessions_lock); //wfh must done
 	//MSRP_LIST_FREE(contexts, contexts_lock);
 	//MSRP_LIST_FREE(relays, relays_lock);

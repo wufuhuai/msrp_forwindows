@@ -16,4 +16,6 @@
 
 	#define snprintf _snprintf  //may be err
 	#define socketpair win32_socketpair
+	#define close(param1) closesocket(param1)
+	#define SHUT_RDWR 2
 #endif
