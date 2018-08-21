@@ -6,7 +6,7 @@ This project is use for MSRP(Message Session Relay Protocol).
 NOTES
 =====
 ---------------------------------------------------------
-The code is come from http://confiance.sourceforge.net/ which started to support the Linux system. It can support the windows now.
+The code is come from http://confiance.sourceforge.net/ which only supports the Linux system. Now, It can supports the windows.
 ------------------------------------------------------------
 
 
